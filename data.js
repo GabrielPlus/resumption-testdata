@@ -1,9 +1,11 @@
+require('dotenv').config(); // Load environment variables from .env file
 const Chance = require('chance');
 const mongoose = require('mongoose');
 
 const chance = new Chance();
 
-const uri = 'mongodb+srv://gabrielpius0311:8VpzJeD26DCI2c3s@cluster0.vvlp0lg.mongodb.net/wee?retryWrites=true&w=majority/'; // Replace with your MongoDB Atlas connection string
+// Correct the URI by removing the trailing slash
+const uri = process.env.MONGODB_URI; // Use the MongoDB connection string from .env
 const dbName = 'wee'; // Replace with your database name
 const collectionName = 'students'; // Replace with your collection name
 
@@ -107,13 +109,24 @@ function getRandomAccommodation() {
   return chance.pickone(accommodations);
 }
 
-// Function to generate random student data
+// Function to generate random student data with unique admission numbers
 async function generateData(numRecords) {
   const students = [];
+  const usedAdmissions = new Set();
+
   for (let i = 0; i < numRecords; i++) {
+    let admission;
+
+    // Ensure the admission number is unique
+    do {
+      admission = chance.integer({ min: 20000, max: 60000 });
+    } while (usedAdmissions.has(admission));
+
+    usedAdmissions.add(admission);
+
     students.push({
       name: chance.name(),
-      admission: chance.integer({ min: 1000000, max: 9999999 }),
+      admission,  // Unique admission number
       course: chance.word(),
       admindate: chance.date({ year: chance.integer({ min: 2015, max: 2023 }) }).toISOString().split('T')[0],
       email: chance.email(),
@@ -124,26 +137,41 @@ async function generateData(numRecords) {
       level: getRandomLevel(),
       accommodation: getRandomAccommodation(),
       covered: chance.sentence(),
-      uncovered: chance.sentence()
+      uncovered: chance.sentence(),
     });
   }
   return students;
 }
 
+// Function to show a loading state
+function showLoadingMessage(message) {
+  let dots = 0;
+  const interval = setInterval(() => {
+    process.stdout.write(`\r${message}${'.'.repeat(dots)}`);
+    dots = (dots + 1) % 4;
+  }, 500);
+  return interval;
+}
+
 // Function to insert data into MongoDB
 async function insertData() {
-  try {
-    await mongoose.connect(uri, { useNewUrlParser: true, useUnifiedTopology: true });
-    console.log('Connected to MongoDB');
+  let loadingInterval;
 
-    // Generate data
-    const data = await generateData(600); // Change the number to generate more or fewer records
+  try {
+    loadingInterval = showLoadingMessage('Please wait, connecting to the database');
+    await mongoose.connect(uri); // Simplified connection without deprecated options
+    clearInterval(loadingInterval);
+    console.log('\rConnected to MongoDB');
+
+    console.log('Adding data to the database...');
+    const data = await generateData(120); // Change the number to generate more or fewer records
 
     // Insert data into MongoDB
     const result = await Student.insertMany(data);
-    console.log(`${result.length} records inserted`);
+    console.log(`${result.length} records inserted successfully`);
 
   } catch (err) {
+    clearInterval(loadingInterval);
     console.error('Error inserting data:', err);
   } finally {
     await mongoose.disconnect();
@@ -157,16 +185,16 @@ insertData();
 
 
 
+
 // const { MongoClient } = require('mongodb');
 
 // // Replace with your MongoDB Atlas connection string
-// const uri = 'mongodb+srv://gabrielpius0311:8VpzJeD26DCI2c3s@cluster0.vvlp0lg.mongodb.net/wee?retryWrites=true&w=majority/';
-
+// const uri = process.env.MONGODB_URI;
 // // Replace with your database and collection names
 // const dbName = 'wee'; // The name of your database
 // const collectionName = 'students'; // The name of your collection
 
-// const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+// const client = new MongoClient(uri);
 
 // async function deleteAllData() {
 //     try {
